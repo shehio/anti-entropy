@@ -23,3 +23,25 @@ go.work.sum
 
 # env file
 .env
+
+# Bazel specific files and directories
+/bazel-*
+/bazel-bin
+/bazel-out
+/bazel-testlogs
+.bazelrc.user
+.ijwb/
+.idea/
+.vscode/
+
+# Bazel build output
+*.a
+*.o
+*.so
+*.dylib
+*.swp
+*.swo
+
+# Bazel cache and logs
+.bazel-cache/
+.bazel-log/
