@@ -22,10 +22,6 @@ func NewNode(id uint64) *Node {
         knownPeers:    make([]*Node, 0),
         lastGossip: time.Now(),
     }
-
-    // todo pass state key
-    node.state["weather"] = "unknown"
-    node.version["weather"] = 0
     return node
 }
 
