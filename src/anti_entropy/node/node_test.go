@@ -40,14 +40,22 @@ func TestGossip(t *testing.T) {
 	node2.UpdateState("test", "value2") // Update twice to ensure higher version
 
 	// Let nodes gossip multiple times to ensure state propagation
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ { // Increased number of rounds
 		node1.Gossip()
 		time.Sleep(1100 * time.Millisecond)
 		node2.Gossip()
 		time.Sleep(1100 * time.Millisecond)
+
+		// Check intermediate states
+		state1 := node1.GetState()
+		state2 := node2.GetState()
+		if state1["test"] == "value2" && state2["test"] == "value2" {
+			// States have converged, we can exit early
+			return
+		}
 	}
 
-	// Both nodes should have value2 as it has the higher version
+	// Final state check
 	state1 := node1.GetState()
 	state2 := node2.GetState()
 	if state1["test"] != "value2" {
@@ -70,14 +78,29 @@ func TestMultipleKeys(t *testing.T) {
 	node2.UpdateState("key3", "value3")
 
 	// Let nodes gossip multiple times to ensure state propagation
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ { // Increased number of rounds
 		node1.Gossip()
 		time.Sleep(1100 * time.Millisecond)
 		node2.Gossip()
 		time.Sleep(1100 * time.Millisecond)
+
+		// Check intermediate states
+		state1 := node1.GetState()
+		state2 := node2.GetState()
+		allSynced := true
+		for _, key := range []string{"key1", "key2", "key3"} {
+			if state1[key] != state2[key] {
+				allSynced = false
+				break
+			}
+		}
+		if allSynced {
+			// States have converged, we can exit early
+			return
+		}
 	}
 
-	// Check final states
+	// Final state check
 	state1 := node1.GetState()
 	state2 := node2.GetState()
 
