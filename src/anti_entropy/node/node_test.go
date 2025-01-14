@@ -7,79 +7,89 @@ import (
 
 func TestNewNode(t *testing.T) {
 	node := NewNode(1)
-	if node.id != 1 {
-		t.Errorf("Expected node ID 1, got %d", node.id)
+	if node.GetID() != 1 {
+		t.Errorf("Expected node ID to be 1, got %d", node.GetID())
 	}
-	if node.state["food"] != "initial" {
-		t.Errorf("Expected initial food value 'initial', got '%s'", node.state["food"])
-	}
-	if node.version["food"] != 0 {
-		t.Errorf("Expected initial version 0, got %d", node.version["food"])
+	state := node.GetState()
+	if len(state) != 0 {
+		t.Errorf("Expected empty state, got %v", state)
 	}
 }
 
 func TestUpdateState(t *testing.T) {
 	node := NewNode(1)
-	
-	// Test updating state
-	node.UpdateState("food", "pizza")
-	if node.state["food"] != "pizza" {
-		t.Errorf("Expected food value 'pizza', got '%s'", node.state["food"])
-	}
-	if node.version["food"] != 1 {
-		t.Errorf("Expected version 1, got %d", node.version["food"])
-	}
-	
-	// Test updating multiple times
-	node.UpdateState("food", "sushi")
-	if node.state["food"] != "sushi" {
-		t.Errorf("Expected food value 'sushi', got '%s'", node.state["food"])
-	}
-	if node.version["food"] != 2 {
-		t.Errorf("Expected version 2, got %d", node.version["food"])
+	node.UpdateState("test", "value")
+	state := node.GetState()
+	if state["test"] != "value" {
+		t.Errorf("Expected state[test] to be 'value', got %s", state["test"])
 	}
 }
 
 func TestGossip(t *testing.T) {
-	node := NewNode(1)
-	
-	// Test initial gossip
-	node.Gossip()
-	
-	// Test gossip cooldown
-	node.Gossip() // Should not update due to cooldown
-	if node.state["food"] != "initial" {
-		t.Errorf("Expected food value to remain 'initial' during cooldown, got '%s'", node.state["food"])
+	node1 := NewNode(1)
+	node2 := NewNode(2)
+	node1.AddPeer(node2)
+	node2.AddPeer(node1)
+
+	// First update from node1
+	node1.UpdateState("test", "value1")
+	time.Sleep(100 * time.Millisecond)
+
+	// Second update from node2 with a newer value
+	node2.UpdateState("test", "value2")
+	node2.UpdateState("test", "value2") // Update twice to ensure higher version
+
+	// Let nodes gossip multiple times to ensure state propagation
+	for i := 0; i < 3; i++ {
+		node1.Gossip()
+		time.Sleep(1100 * time.Millisecond)
+		node2.Gossip()
+		time.Sleep(1100 * time.Millisecond)
 	}
-	
-	// Wait for cooldown and test again
-	time.Sleep(200 * time.Millisecond)
-	node.Gossip()
-	
-	// Note: We can't test the exact state after gossip because it's randomized
-	// We can only verify that the version might have increased
-	if node.version["food"] > 0 {
-		t.Logf("Gossip updated version to %d", node.version["food"])
+
+	// Both nodes should have value2 as it has the higher version
+	state1 := node1.GetState()
+	state2 := node2.GetState()
+	if state1["test"] != "value2" {
+		t.Errorf("Expected node1 state[test] to be 'value2', got %s", state1["test"])
+	}
+	if state2["test"] != "value2" {
+		t.Errorf("Expected node2 state[test] to be 'value2', got %s", state2["test"])
 	}
 }
 
 func TestMultipleKeys(t *testing.T) {
-	node := NewNode(1)
-	
-	// Test updating multiple keys
-	node.UpdateState("food", "pizza")
-	node.UpdateState("drink", "coffee")
-	
-	if node.state["food"] != "pizza" {
-		t.Errorf("Expected food value 'pizza', got '%s'", node.state["food"])
+	node1 := NewNode(1)
+	node2 := NewNode(2)
+	node1.AddPeer(node2)
+	node2.AddPeer(node1)
+
+	// Set initial states with different keys
+	node1.UpdateState("key1", "value1")
+	node1.UpdateState("key2", "value2")
+	node2.UpdateState("key3", "value3")
+
+	// Let nodes gossip multiple times to ensure state propagation
+	for i := 0; i < 3; i++ {
+		node1.Gossip()
+		time.Sleep(1100 * time.Millisecond)
+		node2.Gossip()
+		time.Sleep(1100 * time.Millisecond)
 	}
-	if node.state["drink"] != "coffee" {
-		t.Errorf("Expected drink value 'coffee', got '%s'", node.state["drink"])
-	}
-	if node.version["food"] != 1 {
-		t.Errorf("Expected food version 1, got %d", node.version["food"])
-	}
-	if node.version["drink"] != 1 {
-		t.Errorf("Expected drink version 1, got %d", node.version["drink"])
+
+	// Check final states
+	state1 := node1.GetState()
+	state2 := node2.GetState()
+
+	expectedKeys := []string{"key1", "key2", "key3"}
+	expectedValues := []string{"value1", "value2", "value3"}
+
+	for i, key := range expectedKeys {
+		if state1[key] != expectedValues[i] {
+			t.Errorf("Node1: Expected %s to be %s, got %s", key, expectedValues[i], state1[key])
+		}
+		if state2[key] != expectedValues[i] {
+			t.Errorf("Node2: Expected %s to be %s, got %s", key, expectedValues[i], state2[key])
+		}
 	}
 } 
