@@ -1,7 +1,8 @@
-# Anti-Entropy and Gossip Protocol
-[![Build](https://github.com/shehio/anti-entropy/actions/workflows/build.yml/badge.svg)](https://github.com/shehio/anti-
-entropy/actions/workflows/build.yml)
-A Go implementation of the gossip protocol for distributed systems, featuring a Merkle tree for efficient state synchronization, primarily targeting data consistency.
+# Anti-Entropy Protocol Implementation
+
+[![Build](https://github.com/shehio/anti-entropy/actions/workflows/build.yml/badge.svg)](https://github.com/shehio/anti-entropy/actions/workflows/build.yml)
+
+A Go implementation of the anti-entropy protocol for distributed systems, featuring a Merkle tree for efficient state synchronization, primarily targeting data consistency.
 
 ### Features
 
