@@ -1,20 +1,17 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
-    name = "node_lib",
-    srcs = ["node/node.go"],
-    importpath = "github.com/shehio/anti-entropy/src/anti_entropy/node",
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "node_test",
-    srcs = ["node/node_test.go"],
-    embed = [":node_lib"],
+    name = "anti_entropy_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/shehio/anti-entropy/src/anti_entropy",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//src/anti_entropy/node",
+    ],
 )
 
 go_binary(
     name = "anti_entropy",
-    srcs = ["main.go"],
-    deps = [":node_lib"],
+    embed = [":anti_entropy_lib"],
+    visibility = ["//visibility:public"],
 ) 
