@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "Running bazel build and tests..."
+bazel build //... && bazel test //... --nocache_test_results
+
+if [ $? -ne 0 ]; then
+    echo "Build or tests failed. Commit aborted."
+    exit 1
+fi
+
+exit 0 
