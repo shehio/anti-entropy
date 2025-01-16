@@ -1,88 +1,242 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/rand"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/shehio/anti-entropy/src/anti_entropy/merkle"
 	"github.com/shehio/anti-entropy/src/anti_entropy/node"
 )
 
-func createAndConnectNodes(count int) []*node.Node {
-    nodes := make([]*node.Node, count)
-    for i := 0; i < count; i++ {
-        nodes[i] = node.NewNode(uint64(i + 1))
-    }
-    
-    for _, n := range nodes {
-        for _, peer := range nodes {
-            if n.GetID() != peer.GetID() {
-                n.AddPeer(peer)
-            }
-        }
-    }
-    return nodes
-}
-
-type weatherUpdate struct {
-    key   string
-    value string
-}
-
-func getWeatherUpdates() []weatherUpdate {
-    return []weatherUpdate{
-        {"weather", "sunny"},
-        {"temperature", "25°C"},
-        {"humidity", "65%"},
-        {"wind_speed", "12 km/h"},
-        {"pressure", "1013 hPa"},
-    }
-}
-
-func shuffleNodes(nodes []*node.Node) []*node.Node {
-	shuffled := make([]*node.Node, len(nodes))
-	copy(shuffled, nodes)
-	rand.Shuffle(len(shuffled), func(i, j int) {
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	})
-	return shuffled
-}
+var n *node.Node
+var merkleTree *merkle.MerkleTree
+var httpClient = &http.Client{Timeout: time.Second * 10}
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	gossipingRounds := 3
-	nodes := createAndConnectNodes(5)
-    updates := getWeatherUpdates()
-
-	fmt.Println("Starting anti-entropy protocol...")
-	fmt.Println("Initial states:")
-	for _, n := range nodes {
-		fmt.Printf("Node %d: %v\n", n.GetID(), n.GetState())
+	nodeIDStr := os.Getenv("NODE_ID")
+	if nodeIDStr == "" {
+		log.Fatal("NODE_ID environment variable is required")
+	}
+	nodeID, err := strconv.ParseUint(nodeIDStr, 10, 64)
+	if err != nil {
+		log.Fatalf("Invalid NODE_ID: %v", err)
 	}
 
-	for i, update := range updates {
-		updatingNode := nodes[rand.Intn(len(nodes))]
-		updatingNode.UpdateState(update.key, update.value)
-        
-		fmt.Printf("\nIteration %d:\n", i+1)
-		fmt.Printf("Node %d updated %s to %s\n", updatingNode.GetID(), update.key, update.value)
+	n = node.NewNode(nodeID)
 
-		for round := 0; round < gossipingRounds; round++ {
-			fmt.Printf("\nGossip Round %d:\n", round+1)
-			
-			shuffledNodes := shuffleNodes(nodes)
-			for _, n := range shuffledNodes {
-				if rand.Float32() < 0.8 { // 80% chance to gossip // todo: show information propagation with different probabilities
-					n.Gossip() // todo: add the number of peers to gossip with
-				}
-			}
-
-			fmt.Println("\nCurrent states:")
-			for _, n := range nodes {
-				fmt.Printf("Node %d: %v\n", n.GetID(), n.GetState())
-			}
-
-			time.Sleep(time.Duration(1+rand.Intn(3)) * time.Second)
+	peerNodes := os.Getenv("PEER_NODES")
+	if peerNodes != "" {
+		peers := strings.Split(peerNodes, ",")
+		for _, peer := range peers {
+			// IRL, we would connect to these peers, for now, we just know about them
+			fmt.Printf("Node %d knows about peer: %s\n", nodeID, peer)
 		}
 	}
+
+	// Initialize Merkle tree with empty state
+	merkleTree = merkle.NewMerkleTree([][]byte{})
+
+	go func() {
+		for {
+			n.Gossip()
+			time.Sleep(time.Second * 5)
+		}
+	}()
+
+	http.HandleFunc("/state", handleState)
+	http.HandleFunc("/gossip", handleGossip)
+	http.HandleFunc("/merkle/root", handleMerkleRoot)
+	http.HandleFunc("/merkle/verify", handleMerkleVerify)
+	http.HandleFunc("/sync", handleSync)
+
+	port := 8080
+	fmt.Printf("Node %d starting on port %d...\n", nodeID, port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func handleState(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		state := n.GetState()
+		json.NewEncoder(w).Encode(state)
+	case http.MethodPost:
+		var req struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		n.UpdateState(req.Key, req.Value)
+		// Update Merkle tree with new state
+		updateMerkleTree()
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleGossip(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get peer nodes from environment variable
+	peerNodes := os.Getenv("PEER_NODES")
+	if peerNodes != "" {
+		peers := strings.Split(peerNodes, ",")
+		for _, peer := range peers {
+			// Send sync request to each peer
+			go syncWithPeer(peer)
+		}
+	}
+
+	n.Gossip()
+	w.WriteHeader(http.StatusOK)
+}
+
+func handleMerkleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rootHash := merkleTree.GetRootHash()
+	json.NewEncoder(w).Encode(map[string]string{"root_hash": rootHash})
+}
+
+func handleMerkleVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Data []byte `json:"data"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	isValid := merkleTree.Verify(req.Data)
+	json.NewEncoder(w).Encode(map[string]bool{"valid": isValid})
+}
+
+func handleSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		State   map[string]string `json:"state"`
+		Version map[string]int    `json:"version"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Update state based on received data
+	for key, value := range req.State {
+		if n.GetVersion()[key] < req.Version[key] {
+			n.UpdateState(key, value)
+		}
+	}
+
+	updateMerkleTree()
+
+	response := struct {
+		State   map[string]string `json:"state"`
+		Version map[string]int    `json:"version"`
+	}{
+		State:   n.GetState(),
+		Version: n.GetVersion(),
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func syncWithPeer(peer string) {
+	state := n.GetState()
+	version := n.GetVersion()
+
+	reqBody := struct {
+		State   map[string]string `json:"state"`
+		Version map[string]int    `json:"version"`
+	}{
+		State:   state,
+		Version: version,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		log.Printf("Error marshaling request: %v", err)
+		return
+	}
+
+	resp, err := httpClient.Post(fmt.Sprintf("http://%s/sync", peer), "application/json", strings.NewReader(string(jsonData)))
+	if err != nil {
+		log.Printf("Error syncing with peer %s: %v", peer, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Error syncing with peer %s: status code %d", peer, resp.StatusCode)
+		return
+	}
+
+	var response struct {
+		State   map[string]string `json:"state"`
+		Version map[string]int    `json:"version"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("Error decoding response from peer %s: %v", peer, err)
+		return
+	}
+
+	// Update our state based on response
+	for key, value := range response.State {
+		if n.GetVersion()[key] < response.Version[key] {
+			n.UpdateState(key, value)
+		}
+	}
+
+	updateMerkleTree()
+}
+
+func updateMerkleTree() {
+	type entry struct {
+		key   string
+		value string
+	}
+	
+	entries := make([]entry, 0, len(n.GetState()))
+	for key, value := range n.GetState() {
+		entries = append(entries, entry{key, value})
+	}
+	
+	// Sort entries by key
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].key < entries[j].key
+	})
+	
+	var data [][]byte
+	for _, e := range entries {
+		entry := fmt.Sprintf("%s:%s", e.key, e.value)
+		data = append(data, []byte(entry))
+	}
+	merkleTree = merkle.NewMerkleTree(data)
 } 

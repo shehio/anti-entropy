@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//src/anti_entropy/node",
+        "//src/anti_entropy/merkle",
     ],
 )
 
