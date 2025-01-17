@@ -1,71 +1,100 @@
-# Anti-Entropy Protocol Implementation
+# Anti-Entropy Repair by Gossip Protocol
 
 [![Build](https://github.com/shehio/anti-entropy/actions/workflows/build.yml/badge.svg)](https://github.com/shehio/anti-entropy/actions/workflows/build.yml)
 
-A Go implementation of the anti-entropy protocol for distributed systems, featuring a Merkle tree for efficient state synchronization, primarily targeting data consistency.
+A distributed system implementation using anti-entropy protocols for eventual consistency. This system uses Merkle trees for efficient state comparison and synchronization between nodes.
 
-### Features
+## Features
 
-- Distributed node communication
-- Merkle tree-based state verification
-- Gossip protocol for state propagation
-- Version-based conflict resolution
-- Configurable update intervals
+- Distributed state management
+- Merkle tree-based state comparison
+- HTTP-based node communication
+- Docker containerization support
+- Multi-node testing capabilities
 
-## Project Structure
-
-```
-src/anti_entropy/
-├── main.go           # Main program entry point
-├── node/            # Node implementation
-│   ├── node.go      # Node structure and methods
-│   └── node_test.go # Node tests
-└── merkle/          # Merkle tree implementation
-    ├── merkle_node.go  # Merkle node structure
-    ├── merkle_tree.go  # Merkle tree operations
-    └── merkle_test.go  # Merkle tree tests
-```
-
-### Prerequisites
+## Prerequisites
 
 - Go 1.21 or later
-- Bazel 8.1.1 or later
-
-### Installation
-
-1. Install Go (if not already installed):
-   ```bash
-   # On macOS
-   brew install go
-   ```
-
-2. Initialize the Go module (if not already done):
-   ```bash
-   cd src/anti_entropy
-   go mod init github.com/shehio/anti-entropy
-   go mod tidy
-   ```
-
-3. Install dependencies:
-   ```bash
-   go get github.com/gorilla/mux
-   ```
+- Docker and Docker Compose
+- Bazel build system
 
 ## Building
 
-## Testing
-
-The project includes comprehensive tests for both the node and Merkle tree implementations:
+To build the project:
 
 ```bash
-# Run node tests
-bazel test //src/anti_entropy/node:node_test
-
-# Run Merkle tree tests
-bazel test //src/anti_entropy/merkle:merkle_test
+bazel build //src/anti_entropy:anti_entropy
 ```
 
-## Development Setup
+## Running Tests
+
+### Unit Tests
+
+Run all unit tests:
+
+```bash
+bazel test //...
+```
+
+### Integration Tests
+
+Run the Merkle tree integration tests:
+
+```bash
+./test_merkle.sh
+```
+
+This script will:
+1. Build the project
+2. Run Merkle tree tests
+3. Start three nodes
+4. Add test data
+5. Trigger gossip
+6. Verify state consistency
+
+## Docker Setup
+
+The project includes Docker support for easy deployment and testing.
+
+### Building the Docker Image
+
+```bash
+docker build -t anti-entropy .
+```
+
+### Running with Docker Compose
+
+Start a cluster of three nodes:
+
+```bash
+docker-compose up
+```
+
+This will start three nodes with the following configuration:
+- Node 1: Port 8081
+- Node 2: Port 8082
+- Node 3: Port 8083
+
+Each node will automatically connect to its peers and begin synchronization.
+
+## API Endpoints
+
+Each node exposes the following HTTP endpoints:
+
+- `GET /state` - Get current node state
+- `POST /state` - Update node state
+- `POST /gossip` - Trigger gossip with peers
+- `GET /merkle/root` - Get Merkle tree root hash
+- `POST /merkle/verify` - Verify data against Merkle tree
+- `POST /sync` - Synchronize state with peers
+
+## Testing Results
+
+The system has been tested with the following results:
+- All unit tests passing
+- Successful state synchronization between nodes
+- Identical Merkle tree root hashes across all nodes
+- Consistent state across the cluster
 
 ## License
 
