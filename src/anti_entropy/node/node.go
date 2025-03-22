@@ -14,12 +14,12 @@ type Node struct {
     lastGossip time.Time
 }
 
-func NewNode(id uint64) *Node {
+func NewNode(id uint64, knownPeers []uint64) *Node {
     node := &Node{
         id:       id,
         state:    make(map[string]string),
         version:  make(map[string]int),
-        knownPeers:    make([]*Node, 0),
+        knownPeers:    knownPeers,
         lastGossip: time.Now(),
     }
 
@@ -59,8 +59,7 @@ func (n *Node) Gossip() {
     }
     peer := n.knownPeers[rand.Intn(len(n.knownPeers))]
     
-    fmt.Printf("\nNode %d gossiping with Node %d\n", n.id, peer.id)
-    fmt.Printf("Node %d sending state: %v (versions: %v)\n", n.id, n.state, n.version)
+    fmt.Printf("\nNode %d gossiping with Node %d\n", n.id, peer)
 
     // Exchange states with peer
     for key, value := range peer.state {
