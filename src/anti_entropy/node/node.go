@@ -14,15 +14,16 @@ type Node struct {
     lastGossip time.Time
 }
 
-func NewNode(id uint64, knownPeers []uint64) *Node {
+func NewNode(id uint64) *Node {
     node := &Node{
         id:       id,
         state:    make(map[string]string),
         version:  make(map[string]int),
-        knownPeers:    knownPeers,
+        knownPeers:    make([]*Node, 0),
         lastGossip: time.Now(),
     }
 
+    // todo pass state key
     node.state["weather"] = "unknown"
     node.version["weather"] = 0
     return node
@@ -59,7 +60,7 @@ func (n *Node) Gossip() {
     }
     peer := n.knownPeers[rand.Intn(len(n.knownPeers))]
     
-    fmt.Printf("\nNode %d gossiping with Node %d\n", n.id, peer)
+    fmt.Printf("\nNode %d gossiping with Node %d\n", n.id, peer.id)
 
     // Exchange states with peer
     for key, value := range peer.state {
